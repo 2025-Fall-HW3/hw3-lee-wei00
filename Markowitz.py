@@ -62,6 +62,12 @@ class EqualWeightPortfolio:
         """
         TODO: Complete Task 1 Below
         """
+        n = len(assets)
+        w = 1 / n
+
+        # assign equal weights every day
+        for date in df.index:
+            self.portfolio_weights.loc[date, assets] = w
 
         """
         TODO: Complete Task 1 Above
@@ -113,6 +119,14 @@ class RiskParityPortfolio:
         """
         TODO: Complete Task 2 Below
         """
+        for i in range(self.lookback, len(df)):
+            window = df_returns[assets].iloc[i - self.lookback : i]
+            vol = window.std()
+
+            inv_vol = 1 / (vol + 1e-8)
+            weights = inv_vol / inv_vol.sum()
+
+            self.portfolio_weights.loc[df.index[i], assets] = weights.values
 
 
 
@@ -190,8 +204,15 @@ class MeanVariancePortfolio:
 
                 # Sample Code: Initialize Decision w and the Objective
                 # NOTE: You can modify the following code
-                w = model.addMVar(n, name="w", ub=1)
-                model.setObjective(w.sum(), gp.GRB.MAXIMIZE)
+                w = model.addMVar(n, lb=0, name="w")  # long only
+
+                # objective: maximize µᵀw - γ/2 * wᵀΣw
+                quad = w @ Sigma @ w
+                linear = mu @ w
+                model.setObjective(linear - gamma * quad / 2, gp.GRB.MAXIMIZE)
+
+                # constraint: weights sum to 1
+                model.addConstr(w.sum() == 1)
 
                 """
                 TODO: Complete Task 3 Above

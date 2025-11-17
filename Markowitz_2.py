@@ -70,7 +70,30 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
-        
+        for i in range(self.lookback, len(self.price)):
+            window_returns = self.returns.iloc[i - self.lookback : i][assets]
+
+            # 1. momentum = past lookback mean return
+            momentum = window_returns.mean()
+
+            # 2. volatility = standard deviation
+            vol = window_returns.std() + 1e-8
+
+            # 3. raw signal = momentum / vol  (reward-to-risk)
+            raw = momentum / vol
+
+            # 4. long-only: remove negative signals
+            raw[raw < 0] = 0
+
+            # 5. if all signals <= 0 → equal weight
+            if raw.sum() == 0:
+                weights = np.ones(len(assets)) / len(assets)
+            else:
+                weights = raw / raw.sum()
+
+            # assign weights to portfolio
+            self.portfolio_weights.loc[self.price.index[i], assets] = weights
+
         
         """
         TODO: Complete Task 4 Above
