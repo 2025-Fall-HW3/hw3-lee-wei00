@@ -63,11 +63,13 @@ class EqualWeightPortfolio:
         TODO: Complete Task 1 Below
         """
         n = len(assets)
-        w = 1 / n
+        if n == 0:
+            return
+        w = 1.0 / n
 
         # assign equal weights every day
         for date in df.index:
-            self.portfolio_weights.loc[date, assets] = w
+            self.portfolio_weights.loc[date, assets] = np.ones(n) * w
 
         """
         TODO: Complete Task 1 Above
@@ -114,34 +116,37 @@ class RiskParityPortfolio:
         assets = df.columns[df.columns != self.exclude]
 
         # Calculate the portfolio weights
-        self.portfolio_weights = pd.DataFrame(index=df.index, columns=df.columns)
+        self.portfolio_weights = pd.DataFrame(0.0, index=df.index, columns=df.columns)
 
         """
         TODO: Complete Task 2 Below
         """
-        # ensure numeric dtype (overwrite to avoid dtype object issues)
-        self.portfolio_weights = pd.DataFrame(0.0, index=df.index, columns=df.columns)
-
         for i in range(self.lookback, len(df)):
-            window = df_returns[assets].iloc[i - self.lookback: i]
+            window = df_returns[assets].iloc[i - self.lookback : i]
 
-            # volatility
-            vol = window.std()
-            vol = vol.replace([np.inf, -np.inf], np.nan).fillna(1.0)
-            vol = vol + 1e-8
+            # volatility (pandas default ddof=1). add epsilon to avoid exact zero.
+            vol = window.std() + 1e-8
 
-            # inverse volatility
+            # handle inf/nan: if any are nan, replace with mean of vols or 1.0 fallback
+            vol = vol.replace([np.inf, -np.inf], np.nan)
+            if vol.isna().all():
+                vol = pd.Series(1.0, index=vol.index)
+            else:
+                mean_vol = vol.mean()
+                if np.isnan(mean_vol) or mean_vol == 0:
+                    mean_vol = 1.0
+                vol = vol.fillna(mean_vol)
+
             inv_vol = 1.0 / vol
             inv_vol = inv_vol.replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
-            # normalize
             if inv_vol.sum() <= 0:
                 weights = np.ones(len(assets)) / len(assets)
             else:
                 weights = (inv_vol / inv_vol.sum()).astype(float).values
 
+            # assign weights for date i
             self.portfolio_weights.loc[df.index[i], assets] = weights
-
         """
         TODO: Complete Task 2 Above
         """
@@ -221,7 +226,7 @@ class MeanVariancePortfolio:
                 # objective: maximize µᵀw - γ/2 * wᵀΣw
                 quad = w @ Sigma @ w
                 linear = mu @ w
-                model.setObjective(linear - gamma * quad / 2, gp.GRB.MAXIMIZE)
+                model.setObjective(linear - gamma * quad / 2.0, gp.GRB.MAXIMIZE)
 
                 # constraint: weights sum to 1
                 model.addConstr(w.sum() == 1)

@@ -63,20 +63,11 @@ class MyPortfolio:
         assets = self.price.columns[self.price.columns != self.exclude]
 
         # Calculate the portfolio weights
-        self.portfolio_weights = pd.DataFrame(
-            index=self.price.index, columns=self.price.columns
-        )
-
+        self.portfolio_weights = pd.DataFrame(0.0, index=self.price.index, columns=self.price.columns)
         """
         TODO: Complete Task 4 Below
         """
-        assets = self.price.columns[self.price.columns != self.exclude]
-
-        # initialize with floats (avoid object dtype)
-        self.portfolio_weights = pd.DataFrame(0.0, index=self.price.index, columns=self.price.columns)
-
-        # parameters
-        k = 3  # top-k assets to hold (tuneable)
+        k = 3  # top-k assets to hold
 
         for i in range(self.lookback, len(self.price)):
             window_ret = self.returns.iloc[i - self.lookback : i][assets]
@@ -86,7 +77,14 @@ class MyPortfolio:
 
             # 2) downside risk (semi-std)
             downside = window_ret[window_ret < 0].std()
-            downside = downside.fillna(downside.mean()).replace(0, 1e-8)
+            downside = downside.replace([np.inf, -np.inf], np.nan)
+            if downside.isna().all():
+                downside = pd.Series(1.0, index=downside.index)
+            else:
+                m = downside.mean()
+                if np.isnan(m) or m == 0:
+                    m = 1.0
+                downside = downside.fillna(m)
 
             # 3) raw score: reward-to-downside
             score = momentum / (downside + 1e-8)
@@ -94,7 +92,7 @@ class MyPortfolio:
 
             # 4) choose top-k by score
             if score.sum() == 0 or (score > 0).sum() == 0:
-                selected = list(assets)  # fallback: use all
+                selected = list(assets)
             else:
                 selected = score.sort_values(ascending=False).index[:k].tolist()
 
@@ -102,45 +100,36 @@ class MyPortfolio:
             sub_returns = window_ret[selected]
             vol = sub_returns.std().replace(0, 1e-8) + 1e-8
             inv_vol = 1.0 / vol
-            inv_vol = inv_vol.replace([np.inf, -np.inf], 0).fillna(0.0)
+            inv_vol = inv_vol.replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
             sub_score = score[selected].clip(lower=0.0)
-            # combine score and inv_vol: multiply then normalize
             raw = (sub_score * inv_vol).fillna(0.0)
             if raw.sum() == 0:
-                # fallback equal weight on selected
                 w_sub = np.ones(len(selected)) / len(selected)
             else:
                 w_sub = (raw / raw.sum()).values
 
             # build full-weight vector (zeros for non-selected)
             w_full = np.zeros(len(assets), dtype=float)
-            # match order of 'assets'
             asset_list = list(assets)
             for idx, a in enumerate(asset_list):
                 if a in selected:
                     w_full[idx] = w_sub[selected.index(a)]
 
-            # final safety: if sum==0, equal weight across all assets
+            # final safety: normalize
             if w_full.sum() == 0:
                 w_full = np.ones(len(assets)) / len(assets)
             else:
                 w_full = w_full / w_full.sum()
 
-            # assign (use same asset ordering)
+            # assign
             self.portfolio_weights.loc[self.price.index[i], assets] = w_full
-
-        # forward fill and ensure no NaN
-        self.portfolio_weights.ffill(inplace=True)
-        self.portfolio_weights.fillna(0.0, inplace=True)
-        # -------------------------
-
         """
         TODO: Complete Task 4 Above
         """
 
         self.portfolio_weights.ffill(inplace=True)
-        self.portfolio_weights.fillna(0, inplace=True)
+        self.portfolio_weights.fillna(0.0, inplace=True)
 
     def calculate_portfolio_returns(self):
         # Ensure weights are calculated
