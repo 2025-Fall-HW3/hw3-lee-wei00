@@ -71,35 +71,34 @@ class MyPortfolio:
         TODO: Complete Task 4 Below
         """
                 # ensure numeric dtype and zeros by default
+        assets = self.price.columns[self.price.columns != self.exclude]
+
+        # initialize with float values
         self.portfolio_weights = pd.DataFrame(
             0.0, index=self.price.index, columns=self.price.columns
         )
 
-        assets = [c for c in self.price.columns if c != self.exclude]
-
         for i in range(self.lookback, len(self.price)):
-            window_returns = self.returns.iloc[i - self.lookback : i][assets]
+            window_ret = self.returns.iloc[i - self.lookback : i][assets]
 
-            # momentum: mean return over lookback
-            momentum = window_returns.mean()
+            # 1. momentum (stronger than simple mean)
+            momentum = (1 + window_ret).prod() - 1
 
-            # volatility
-            vol = window_returns.std() + 1e-8
+            # 2. downside risk (semi-std)
+            downside = window_ret[window_ret < 0].std() + 1e-8
 
-            raw = momentum / vol
-            # remove negatives (long-only)
-            raw = raw.clip(lower=0.0)
+            score = momentum / downside
 
-            # convert to numpy and normalize
-            if raw.sum() == 0:
-                weights = np.ones(len(assets)) / len(assets)
+            # 3. remove negative scores
+            score = score.clip(lower=0)
+
+            if score.sum() == 0:
+                weights = np.ones(len(assets)) / len(assets)  # fallback
             else:
-                weights = (raw / raw.sum()).values
+                weights = (score / score.sum()).values
 
-            # assign
             self.portfolio_weights.loc[self.price.index[i], assets] = weights
 
-        # fill
         self.portfolio_weights.ffill(inplace=True)
         self.portfolio_weights.fillna(0.0, inplace=True)
 

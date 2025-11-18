@@ -122,19 +122,21 @@ class RiskParityPortfolio:
         for i in range(self.lookback, len(df)):
             window = df_returns[assets].iloc[i - self.lookback : i]
 
-            vol = window.std() + 1e-8     # avoid zero division
+            # volatility
+            vol = window.std() + 1e-8
+            vol = vol.replace([np.inf, -np.inf], np.nan).fillna(1.0)
 
-            inv_vol = 1 / vol
-            inv_vol = inv_vol.replace([np.inf, -np.inf], 0).fillna(0)
+            # inverse volatility
+            inv_vol = 1.0 / vol
 
-            if inv_vol.sum() == 0:
-                # fallback: equal weight (avoid all-zero)
+            # avoid all zero case
+            if inv_vol.sum() <= 0:
                 weights = np.ones(len(assets)) / len(assets)
             else:
                 weights = (inv_vol / inv_vol.sum()).values
 
+            # assign
             self.portfolio_weights.loc[df.index[i], assets] = weights
-
 
         """
         TODO: Complete Task 2 Above
