@@ -119,23 +119,27 @@ class RiskParityPortfolio:
         """
         TODO: Complete Task 2 Below
         """
+        # ensure numeric dtype (overwrite to avoid dtype object issues)
+        self.portfolio_weights = pd.DataFrame(0.0, index=df.index, columns=df.columns)
+
         for i in range(self.lookback, len(df)):
-            window = df_returns[assets].iloc[i - self.lookback : i]
+            window = df_returns[assets].iloc[i - self.lookback: i]
 
             # volatility
-            vol = window.std() + 1e-8
+            vol = window.std()
             vol = vol.replace([np.inf, -np.inf], np.nan).fillna(1.0)
+            vol = vol + 1e-8
 
             # inverse volatility
             inv_vol = 1.0 / vol
+            inv_vol = inv_vol.replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
-            # avoid all zero case
+            # normalize
             if inv_vol.sum() <= 0:
                 weights = np.ones(len(assets)) / len(assets)
             else:
-                weights = (inv_vol / inv_vol.sum()).values
+                weights = (inv_vol / inv_vol.sum()).astype(float).values
 
-            # assign
             self.portfolio_weights.loc[df.index[i], assets] = weights
 
         """
