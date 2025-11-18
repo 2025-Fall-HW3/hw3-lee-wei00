@@ -70,31 +70,39 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
+                # ensure numeric dtype and zeros by default
+        self.portfolio_weights = pd.DataFrame(
+            0.0, index=self.price.index, columns=self.price.columns
+        )
+
+        assets = [c for c in self.price.columns if c != self.exclude]
+
         for i in range(self.lookback, len(self.price)):
             window_returns = self.returns.iloc[i - self.lookback : i][assets]
 
-            # 1. momentum = past lookback mean return
+            # momentum: mean return over lookback
             momentum = window_returns.mean()
 
-            # 2. volatility = standard deviation
+            # volatility
             vol = window_returns.std() + 1e-8
 
-            # 3. raw signal = momentum / vol  (reward-to-risk)
             raw = momentum / vol
+            # remove negatives (long-only)
+            raw = raw.clip(lower=0.0)
 
-            # 4. long-only: remove negative signals
-            raw[raw < 0] = 0
-
-            # 5. if all signals <= 0 → equal weight
+            # convert to numpy and normalize
             if raw.sum() == 0:
                 weights = np.ones(len(assets)) / len(assets)
             else:
-                weights = raw / raw.sum()
+                weights = (raw / raw.sum()).values
 
-            # assign weights to portfolio
+            # assign
             self.portfolio_weights.loc[self.price.index[i], assets] = weights
 
-        
+        # fill
+        self.portfolio_weights.ffill(inplace=True)
+        self.portfolio_weights.fillna(0.0, inplace=True)
+
         """
         TODO: Complete Task 4 Above
         """
