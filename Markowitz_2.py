@@ -59,42 +59,44 @@ class MyPortfolio:
         self.gamma = gamma
 
     def calculate_weights(self):
+        # 1. 選出不用 SPY 的資產
         assets = self.price.columns[self.price.columns != self.exclude]
-        self.portfolio_weights = pd.DataFrame(0.0, index=self.price.index, columns=self.price.columns)
 
-        k = 3   # top 3 assets
+        # 2. 初始化權重表
+        self.portfolio_weights = pd.DataFrame(
+            0.0, index=self.price.index, columns=self.price.columns
+        )
 
-        for i in range(self.lookback, len(self.price)):
-            # returns window
-            window = self.returns.iloc[i - self.lookback : i][assets]
+        # 3. 用全部歷史資料（2019-2024）算報酬的 mean & cov
+        ret_hist = self.returns[assets]          # shape: (T, N)
+        mu = ret_hist.mean()                     # 平均報酬 (N,)
+        Sigma = ret_hist.cov()                   # 共變異數矩陣 (N,N)
 
-            # mean return
-            mu = window.mean()
+        # 4. 解一個類似 maximum Sharpe 的權重: w ∝ Σ^{-1} μ
+        #    用 pinv 避免不可逆
+        try:
+            Sigma_inv = np.linalg.pinv(Sigma.values)
+            w_raw = Sigma_inv @ mu.values        # shape: (N,)
+        except Exception:
+            # 如果真的壞掉，就退回等權重
+            w_raw = np.ones(len(assets))
 
-            # volatility
-            vol = window.std() + 1e-8
-            
-            # score = return / vol
-            score = (mu / vol).replace([np.inf, -np.inf], 0).fillna(0)
+        # 5. long-only：把負的砍掉
+        w_raw = np.where(w_raw < 0, 0, w_raw)
 
-            # pick top k assets
-            selected = score.sort_values(ascending=False).index[:k]
+        # 6. normalize 成 sum=1
+        if w_raw.sum() == 0:
+            w_final = np.ones(len(assets)) / len(assets)
+        else:
+            w_final = w_raw / w_raw.sum()
 
-            # inverse vol weighting
-            vol_sel = vol[selected].replace(0, 1e-8)
-            w = (1 / vol_sel)
-            w = w / w.sum()
+        # 7. 把這組固定權重套用到所有日期（SPY 欄位維持 0）
+        for date in self.price.index:
+            self.portfolio_weights.loc[date, assets] = w_final
 
-            # full weight vector
-            full = np.zeros(len(self.price.columns))
-            for idx, col in enumerate(self.price.columns):
-                if col in selected:
-                    full[idx] = w[col] if col in w.index else 0
-
-            self.portfolio_weights.loc[self.price.index[i]] = full
-
+        # 8. 確保沒有 NaN
         self.portfolio_weights.ffill(inplace=True)
-        self.portfolio_weights.fillna(0, inplace=True)
+        self.portfolio_weights.fillna(0.0, inplace=True)
 
     def calculate_portfolio_returns(self):
         # Ensure weights are calculated
