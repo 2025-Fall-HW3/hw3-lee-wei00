@@ -68,59 +68,60 @@ class MyPortfolio:
         TODO: Complete Task 4 Below
         """
         # parameters
-        k = 3  # top-k assets to hold
+    k = 3  # top-k assets to hold
 
-        for i in range(self.lookback, len(self.price)):
-            window_ret = self.returns.iloc[i - self.lookback : i][assets]
+    for i in range(self.lookback, len(self.price)):
+        window_ret = self.returns.iloc[i - self.lookback : i][assets]
 
-            # 1) momentum: compound return over lookback
-            momentum = (1 + window_ret).prod() - 1
+    # 1) momentum: compound return over lookback
+        momentum = (1 + window_ret).prod() - 1
 
-            # 2) downside risk (semi-std)
-            downside = window_ret[window_ret < 0].std()
-            downside = downside.replace([np.inf, -np.inf], np.nan)
-            if downside.isna().all():
-                downside = pd.Series(1.0, index=downside.index)
-            else:
-                m = downside.mean()
-                if np.isnan(m) or m == 0:
-                    m = 1.0
-                downside = downside.fillna(m)
+    # 2) downside risk (semi-std)
+        downside = window_ret[window_ret < 0].std()
+        downside = downside.replace([np.inf, -np.inf], np.nan)
+        if downside.isna().all():
+            downside = pd.Series(1.0, index=downside.index)
+        else:
+            m = downside.mean()
+            if np.isnan(m) or m == 0:
+                m = 1.0
+            downside = downside.fillna(m)
 
-            score = momentum / (downside + 1e-8)
-            score = score.clip(lower=0.0)
+        score = momentum / (downside + 1e-8)
+        score = score.clip(lower=0.0)
 
-            if score.sum() == 0 or (score > 0).sum() == 0:
-                selected = list(assets)
-            else:
-                selected = score.sort_values(ascending=False).index[:k].tolist()
+        if score.sum() == 0 or (score > 0).sum() == 0:
+            selected = list(assets)
+        else:
+            selected = score.sort_values(ascending=False).index[:k].tolist()
 
-            sub_returns = window_ret[selected]
-            vol = sub_returns.std().replace(0, 1e-8) + 1e-8
-            inv_vol = 1.0 / vol
-            inv_vol = inv_vol.replace([np.inf, -np.inf], 0.0).fillna(0.0)
+        sub_returns = window_ret[selected]
+        vol = sub_returns.std().replace(0, 1e-8) + 1e-8
+        inv_vol = 1.0 / vol
+        inv_vol = inv_vol.replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
-            sub_score = score[selected].clip(lower=0.0)
-            raw = (sub_score * inv_vol).fillna(0.0)
-            if raw.sum() == 0:
-                w_sub = np.ones(len(selected)) / len(selected)
-            else:
-                w_sub = (raw / raw.sum()).values
+        sub_score = score[selected].clip(lower=0.0)
+        raw = (sub_score * inv_vol).fillna(0.0)
+        if raw.sum() == 0:
+            w_sub = np.ones(len(selected)) / len(selected)
+        else:
+            w_sub = (raw / raw.sum()).values
 
-            w_full = np.zeros(len(assets), dtype=float)
-            asset_list = list(assets)
-            for idx, a in enumerate(asset_list):
-                if a in selected:
-                    j = selected.index(a)
-                    if j < len(w_sub):
-                        w_full[idx] = w_sub[j]
+    # build full weight vector
+        w_full = np.zeros(len(assets), dtype=float)
+        asset_list = list(assets)
+        for idx, a in enumerate(asset_list):
+            if a in selected:
+                j = selected.index(a)
+                if j < len(w_sub):
+                    w_full[idx] = w_sub[j]
 
-            if w_full.sum() == 0:
-                w_full = np.ones(len(assets)) / len(assets)
-            else:
-                w_full = w_full / w_full.sum()
+        if w_full.sum() == 0:
+            w_full = np.ones(len(assets)) / len(assets)
+        else:
+            w_full = w_full / w_full.sum()
 
-            self.portfolio_weights.loc[self.price.index[i], assets] = w_full
+        self.portfolio_weights.loc[self.price.index[i], assets] = w_full
 
         """
         TODO: Complete Task 4 Above
