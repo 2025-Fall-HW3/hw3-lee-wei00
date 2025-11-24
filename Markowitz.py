@@ -124,6 +124,7 @@ class RiskParityPortfolio:
         for i in range(self.lookback, len(df)):
             window = df_returns[assets].iloc[i - self.lookback : i]
 
+            # volatility
             vol = window.std() + 1e-8
             vol = vol.replace([np.inf, -np.inf], np.nan)
 
@@ -138,22 +139,15 @@ class RiskParityPortfolio:
             inv_vol = 1.0 / vol
             inv_vol = inv_vol.replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
-            # normalize 使得 sum(weights)=1
+            # normalize so sum = 1
             if inv_vol.sum() <= 0:
-                w = np.ones(len(assets)) / len(assets)
+                weights = np.ones(len(assets)) / len(assets)
             else:
-                w = inv_vol / inv_vol.sum()
+                weights = inv_vol / inv_vol.sum()
 
-            # 建立全欄位的 vector（SPY = 0）
-            full = np.zeros(len(df.columns))
-            for idx, col in enumerate(df.columns):
-                if col in assets:
-                    j = list(assets).index(col)
-                    full[idx] = w[j]
-                else:
-                    full[idx] = 0.0
+            # **正確方式：只填入 assets 欄位，不用 full vector**
+            self.portfolio_weights.loc[df.index[i], assets] = weights.values
 
-            self.portfolio_weights.loc[df.index[i]] = full
 
         """
         TODO: Complete Task 2 Above
