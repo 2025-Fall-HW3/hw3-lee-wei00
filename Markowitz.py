@@ -5,8 +5,8 @@ import yfinance as yf
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import quantstats as qs
-import gurobipy as gp
+#import quantstats as qs
+#import gurobipy as gp
 import argparse
 import warnings
 import sys
@@ -212,6 +212,7 @@ class MeanVariancePortfolio:
         self.portfolio_weights.fillna(0, inplace=True)
 
     def mv_opt(self, R_n, gamma):
+        import gurobipy as gp
         Sigma = R_n.cov().values
         mu = R_n.mean().values
         n = len(R_n.columns)
