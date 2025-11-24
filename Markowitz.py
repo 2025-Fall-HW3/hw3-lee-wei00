@@ -124,29 +124,37 @@ class RiskParityPortfolio:
         for i in range(self.lookback, len(df)):
             window = df_returns[assets].iloc[i - self.lookback : i]
 
-            # volatility (pandas default ddof=1). add epsilon to avoid exact zero.
             vol = window.std() + 1e-8
-
-            # handle inf/nan: if any are nan, replace with mean of vols or 1.0 fallback
             vol = vol.replace([np.inf, -np.inf], np.nan)
+
             if vol.isna().all():
                 vol = pd.Series(1.0, index=vol.index)
             else:
-                mean_vol = vol.mean()
-                if np.isnan(mean_vol) or mean_vol == 0:
-                    mean_vol = 1.0
-                vol = vol.fillna(mean_vol)
+                m = vol.mean()
+                if np.isnan(m) or m == 0:
+                    m = 1.0
+                vol = vol.fillna(m)
 
             inv_vol = 1.0 / vol
             inv_vol = inv_vol.replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
+            # normalize 使得 sum(weights)=1
             if inv_vol.sum() <= 0:
-                weights = np.ones(len(assets)) / len(assets)
+                w = np.ones(len(assets)) / len(assets)
             else:
-                weights = (inv_vol / inv_vol.sum()).astype(float).values
+                w = inv_vol / inv_vol.sum()
 
-            # assign weights for date i
-            self.portfolio_weights.loc[df.index[i], assets] = weights
+            # 建立全欄位的 vector（SPY = 0）
+            full = np.zeros(len(df.columns))
+            for idx, col in enumerate(df.columns):
+                if col in assets:
+                    j = list(assets).index(col)
+                    full[idx] = w[j]
+                else:
+                    full[idx] = 0.0
+
+            self.portfolio_weights.loc[df.index[i]] = full
+
         """
         TODO: Complete Task 2 Above
         """
