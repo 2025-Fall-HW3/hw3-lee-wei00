@@ -67,13 +67,14 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
+        # parameters
         k = 3  # top-k assets to hold
 
         for i in range(self.lookback, len(self.price)):
             window_ret = self.returns.iloc[i - self.lookback : i][assets]
 
             # 1) momentum: compound return over lookback
-            momentum = (1 + window_ret).prod() - 1  # pandas Series indexed by assets
+            momentum = (1 + window_ret).prod() - 1
 
             # 2) downside risk (semi-std)
             downside = window_ret[window_ret < 0].std()
@@ -86,17 +87,14 @@ class MyPortfolio:
                     m = 1.0
                 downside = downside.fillna(m)
 
-            # 3) raw score: reward-to-downside
             score = momentum / (downside + 1e-8)
             score = score.clip(lower=0.0)
 
-            # 4) choose top-k by score
             if score.sum() == 0 or (score > 0).sum() == 0:
                 selected = list(assets)
             else:
                 selected = score.sort_values(ascending=False).index[:k].tolist()
 
-            # 5) on selected, compute inverse-vol adjusted weights
             sub_returns = window_ret[selected]
             vol = sub_returns.std().replace(0, 1e-8) + 1e-8
             inv_vol = 1.0 / vol
@@ -109,21 +107,21 @@ class MyPortfolio:
             else:
                 w_sub = (raw / raw.sum()).values
 
-            # build full-weight vector (zeros for non-selected)
             w_full = np.zeros(len(assets), dtype=float)
             asset_list = list(assets)
             for idx, a in enumerate(asset_list):
                 if a in selected:
-                    w_full[idx] = w_sub[selected.index(a)]
+                    j = selected.index(a)
+                    if j < len(w_sub):
+                        w_full[idx] = w_sub[j]
 
-            # final safety: normalize
             if w_full.sum() == 0:
                 w_full = np.ones(len(assets)) / len(assets)
             else:
                 w_full = w_full / w_full.sum()
 
-            # assign
             self.portfolio_weights.loc[self.price.index[i], assets] = w_full
+
         """
         TODO: Complete Task 4 Above
         """
