@@ -121,34 +121,36 @@ class RiskParityPortfolio:
         """
         TODO: Complete Task 2 Below
         """
-        returns = df_returns  # 若你想保留外部，用 returns，但 index 必須一致
+        for i in range(self.lookback, len(df)):
+            window = df_returns[assets].iloc[i - self.lookback : i]
 
-        # 用 self.price 的 index 才不會跟 grader 錯位
-        dates = self.price.index
+            # volatility (pandas default ddof=1). add epsilon to avoid exact zero.
+            vol = window.std() + 1e-8
 
-        for i in range(self.lookback, len(self.price)):
-            window = self.price.pct_change().fillna(0)[assets].iloc[i - self.lookback : i]
-
-            # volatility
-            vol = window.std().replace([np.inf, -np.inf], np.nan)
+            # handle inf/nan: if any are nan, replace with mean of vols or 1.0 fallback
+            vol = vol.replace([np.inf, -np.inf], np.nan)
             if vol.isna().all():
                 vol = pd.Series(1.0, index=vol.index)
             else:
-                vol = vol.fillna(vol.mean() if vol.mean() > 0 else 1.0)
+                mean_vol = vol.mean()
+                if np.isnan(mean_vol) or mean_vol == 0:
+                    mean_vol = 1.0
+                vol = vol.fillna(mean_vol)
 
             inv_vol = 1.0 / vol
             inv_vol = inv_vol.replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
-            if inv_vol.sum() == 0:
-                w = np.ones(len(assets)) / len(assets)
+            if inv_vol.sum() <= 0:
+                weights = np.ones(len(assets)) / len(assets)
             else:
-                w = (inv_vol / inv_vol.sum()).values.astype(float)
+                weights = (inv_vol / inv_vol.sum()).astype(float).values
 
-            self.portfolio_weights.loc[dates[i], assets] = w
-
+            # assign weights for date i
+            self.portfolio_weights.loc[df.index[i], assets] = weights
         """
         TODO: Complete Task 2 Above
         """
+
         self.portfolio_weights.ffill(inplace=True)
         self.portfolio_weights.fillna(0, inplace=True)
 
