@@ -113,31 +113,50 @@ class RiskParityPortfolio:
 
     def calculate_weights(self):
         assets = df.columns[df.columns != self.exclude]
+        all_cols = list(df.columns)
 
-        # 只初始化 assets 欄位，SPY 自動為 NaN，最後 fillna(0)
         self.portfolio_weights = pd.DataFrame(
-            index=df.index, columns=df.columns, dtype=float
+            0.0, index=df.index, columns=all_cols
         )
 
         for i in range(self.lookback, len(df)):
-            window = df_returns[assets].iloc[i - self.lookback : i]
+            window = df_returns[assets].iloc[i-self.lookback : i]
 
-            vol = window.std() + 1e-8
-            vol = vol.replace([np.inf, -np.inf], np.nan)
-            vol = vol.fillna(vol.mean())
+            # volatility
+            vol = window.std().replace([np.inf, -np.inf], np.nan)
+            if vol.isna().all():
+                vol = pd.Series(1.0, index=vol.index)
+            else:
+                m = vol.mean()
+                if np.isnan(m) or m == 0:
+                    m = 1.0
+                vol = vol.fillna(m)
 
             inv_vol = 1.0 / vol
             inv_vol = inv_vol.replace([np.inf, -np.inf], 0).fillna(0)
 
+            # normalize
             if inv_vol.sum() == 0:
-                weights = np.ones(len(assets)) / len(assets)
+                w = np.ones(len(assets)) / len(assets)
             else:
-                weights = inv_vol / inv_vol.sum()
+                w = (inv_vol / inv_vol.sum()).values
 
-            # 只填入 assets 欄位，不動 SPY
-            self.portfolio_weights.loc[df.index[i], assets] = weights.values
+            # ---- build full weight vector ----
+            full = np.zeros(len(all_cols))
 
-        # lookback 前全部填 0（grader 要求）
+            # mapping: asset -> index in assets
+            asset_list = list(assets)
+
+            for col_idx, col_name in enumerate(all_cols):
+                if col_name in assets:
+                    asset_idx = asset_list.index(col_name)
+                    full[col_idx] = w[asset_idx]
+                else:
+                    full[col_idx] = 0.0  # SPY
+
+            self.portfolio_weights.loc[df.index[i], all_cols] = full
+
+        self.portfolio_weights.ffill(inplace=True)
         self.portfolio_weights.fillna(0, inplace=True)
 
 
