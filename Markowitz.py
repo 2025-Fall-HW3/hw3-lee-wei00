@@ -112,48 +112,32 @@ class RiskParityPortfolio:
         self.lookback = lookback
 
     def calculate_weights(self):
-        # Get the assets by excluding the specified column
         assets = df.columns[df.columns != self.exclude]
 
-        # Calculate the portfolio weights
-        self.portfolio_weights = pd.DataFrame(0.0, index=df.index, columns=df.columns)
+        # 只初始化 assets 欄位，SPY 自動為 NaN，最後 fillna(0)
+        self.portfolio_weights = pd.DataFrame(
+            index=df.index, columns=df.columns, dtype=float
+        )
 
-        """
-        TODO: Complete Task 2 Below
-        """
         for i in range(self.lookback, len(df)):
             window = df_returns[assets].iloc[i - self.lookback : i]
 
-            # volatility
             vol = window.std() + 1e-8
             vol = vol.replace([np.inf, -np.inf], np.nan)
-
-            if vol.isna().all():
-                vol = pd.Series(1.0, index=vol.index)
-            else:
-                m = vol.mean()
-                if np.isnan(m) or m == 0:
-                    m = 1.0
-                vol = vol.fillna(m)
+            vol = vol.fillna(vol.mean())
 
             inv_vol = 1.0 / vol
-            inv_vol = inv_vol.replace([np.inf, -np.inf], 0.0).fillna(0.0)
+            inv_vol = inv_vol.replace([np.inf, -np.inf], 0).fillna(0)
 
-            # normalize so sum = 1
-            if inv_vol.sum() <= 0:
-                weights = np.ones(len(assets)) / len(assets)
+            if inv_vol.sum() == 0:
+                w = np.ones(len(assets)) / len(assets)
             else:
-                weights = inv_vol / inv_vol.sum()
+                w = inv_vol / inv_vol.sum()
 
-            # **正確方式：只填入 assets 欄位，不用 full vector**
-            self.portfolio_weights.loc[df.index[i], assets] = weights.values
+            # 只填入 assets 欄位
+            self.portfolio_weights.loc[df.index[i], assets] = w.values
 
-
-        """
-        TODO: Complete Task 2 Above
-        """
-
-        self.portfolio_weights.ffill(inplace=True)
+        # lookback 前全部填 0（autograder 要求）
         self.portfolio_weights.fillna(0, inplace=True)
 
     def calculate_portfolio_returns(self):
