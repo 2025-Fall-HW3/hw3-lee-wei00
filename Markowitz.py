@@ -130,15 +130,16 @@ class RiskParityPortfolio:
             inv_vol = inv_vol.replace([np.inf, -np.inf], 0).fillna(0)
 
             if inv_vol.sum() == 0:
-                w = np.ones(len(assets)) / len(assets)
+                weights = np.ones(len(assets)) / len(assets)
             else:
-                w = inv_vol / inv_vol.sum()
+                weights = inv_vol / inv_vol.sum()
 
-            # 只填入 assets 欄位
-            self.portfolio_weights.loc[df.index[i], assets] = w.values
+            # 只填入 assets 欄位，不動 SPY
+            self.portfolio_weights.loc[df.index[i], assets] = weights.values
 
-        # lookback 前全部填 0（autograder 要求）
+        # lookback 前全部填 0（grader 要求）
         self.portfolio_weights.fillna(0, inplace=True)
+
 
     def calculate_portfolio_returns(self):
         # Ensure weights are calculated
