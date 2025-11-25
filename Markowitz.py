@@ -112,30 +112,36 @@ class RiskParityPortfolio:
         self.lookback = lookback
 
     def calculate_weights(self):
-        assets = df.columns[df.columns != self.exclude]   # 不包含 SPY
-        self.portfolio_weights = pd.DataFrame(0.0, index=df.index, columns=df.columns)
+        # assets 不包含 SPY
+        assets = df.columns[df.columns != self.exclude]
+
+        # RP 標準答案格式：只包含 assets，不包含 SPY
+        self.portfolio_weights = pd.DataFrame(
+            0.0, index=df.index, columns=assets
+        )
 
         for i in range(self.lookback, len(df)):
             window = df_returns[assets].iloc[i-self.lookback : i]
 
-            vol = window.std().replace(0, 1e-8)
-            vol = vol.replace([np.inf, -np.inf], np.nan)
+            # volatility
+            vol = window.std().replace([np.inf, -np.inf], np.nan)
             if vol.isna().any():
-                vol = vol.fillna(vol.mean())
+                m = vol.mean()
+                if np.isnan(m) or m == 0:
+                    m = 1.0
+                vol = vol.fillna(m)
 
-            inv_vol = 1 / vol
-            inv_vol = inv_vol.fillna(0)
+            inv_vol = 1.0 / vol
+            inv_vol = inv_vol.replace([np.inf, -np.inf], 0).fillna(0)
 
-            weights = inv_vol / inv_vol.sum()
+            if inv_vol.sum() == 0:
+                w = np.ones(len(assets)) / len(assets)
+            else:
+                w = inv_vol / inv_vol.sum()
 
-            # 填入 dataframe（SPY 權重 = 0）
-            for col in df.columns:
-                if col == self.exclude:
-                    self.portfolio_weights.loc[df.index[i], col] = 0
-                else:
-                    self.portfolio_weights.loc[df.index[i], col] = weights[col]
+            # ❗❗ 標準答案格式：只有 assets 欄位，不包含 SPY
+            self.portfolio_weights.loc[df.index[i], :] = w.values
 
-        # 前 lookback 天必須 forward fill，不能是 0！
         self.portfolio_weights.ffill(inplace=True)
         self.portfolio_weights.fillna(0, inplace=True)
 
