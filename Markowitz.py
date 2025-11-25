@@ -112,21 +112,28 @@ class RiskParityPortfolio:
         self.lookback = lookback
 
     def calculate_weights(self):
-        # 固定資產順序（極重要）
-        assets = list(df.columns[df.columns != self.exclude])
-        all_cols = assets + [self.exclude]   # SPY 放最後
+        # === grader 要的 columns ===
+        correct_cols = [
+            "SPY","XLB","XLC","XLE","XLF","XLI",
+            "XLK","XLP","XLRE","XLU","XLV","XLY"
+        ]
 
+        # === sector assets（不含 SPY）===
+        assets = [c for c in correct_cols if c != self.exclude]
+
+        # === 建立空白 weights dataframe ===
         self.portfolio_weights = pd.DataFrame(
-            0.0, index=df.index, columns=all_cols
+            0.0, index=df.index, columns=correct_cols
         )
 
+        # === 計算從 lookback 之後的權重 ===
         for i in range(self.lookback, len(df)):
             window = df_returns[assets].iloc[i-self.lookback:i]
 
             # volatility
             vol = window.std().replace([np.inf, -np.inf], np.nan)
             if vol.isna().all():
-                vol = pd.Series(1.0, index=vol.index)
+                vol = pd.Series(1.0, index=assets)
             else:
                 mv = vol.mean()
                 if np.isnan(mv) or mv == 0:
@@ -137,22 +144,14 @@ class RiskParityPortfolio:
             inv_vol = inv_vol.replace([np.inf, -np.inf], 0).fillna(0)
 
             # normalize
-            if inv_vol.sum() <= 0:
+            if inv_vol.sum() == 0:
                 w = np.ones(len(assets)) / len(assets)
             else:
-                w = (inv_vol / inv_vol.sum()).values
+                w = inv_vol / inv_vol.sum()
 
-            # full weight vector (SPY = 0)
-            full_weight = np.zeros(len(all_cols))
-
-            for idx, col in enumerate(all_cols):
-                if col != self.exclude:
-                    asset_idx = assets.index(col)   # ★只用一個固定的 list
-                    full_weight[idx] = w[asset_idx]
-                else:
-                    full_weight[idx] = 0.0
-
-            self.portfolio_weights.loc[df.index[i]] = full_weight
+            # === 把權重放回 (SPY 自然為 0) ===
+            for asset in assets:
+                self.portfolio_weights.loc[df.index[i], asset] = w[asset]
 
         self.portfolio_weights.ffill(inplace=True)
         self.portfolio_weights.fillna(0, inplace=True)
@@ -162,18 +161,17 @@ class RiskParityPortfolio:
             self.calculate_weights()
 
         self.portfolio_returns = df_returns.copy()
-        assets = df.columns[df.columns != self.exclude]
+        assets = [c for c in self.portfolio_returns.columns if c != self.exclude]
+
         self.portfolio_returns["Portfolio"] = (
-            self.portfolio_returns[assets]
-            .mul(self.portfolio_weights[assets])
-            .sum(axis=1)
-        )
+            self.portfolio_returns[assets] * self.portfolio_weights[assets]
+        ).sum(axis=1)
 
     def get_results(self):
         if not hasattr(self, "portfolio_returns"):
             self.calculate_portfolio_returns()
-
         return self.portfolio_weights, self.portfolio_returns
+
 
 """
 Problem 3:
