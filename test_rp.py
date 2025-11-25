@@ -1,15 +1,10 @@
-from Markowitz import RiskParityPortfolio, df
+import pandas as pd
 
-rp_w, rp_ret = RiskParityPortfolio("SPY").get_results()
+# 換成你下載的檔案路徑
+df = pd.read_pickle("C:/Users/user/Downloads/rp.pkl")
 
-print("=== RP Weights Shape ===")
-print(rp_w.shape)
+print(df.head())
+print(df.tail())
+print(df.shape)
+print(df.columns)
 
-print("\n=== Columns ===")
-print(rp_w.columns.tolist())
-
-print("\n=== First 5 rows of RP Weights ===")
-print(rp_w.head())
-
-print("\n=== Last 5 rows of RP Weights ===")
-print(rp_w.tail())
