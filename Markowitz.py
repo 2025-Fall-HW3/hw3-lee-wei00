@@ -112,29 +112,33 @@ class RiskParityPortfolio:
         self.lookback = lookback
 
     def calculate_weights(self):
-        assets = df.columns[df.columns != self.exclude]
-
-        # 老師預期格式：跟 df 一樣 columns
-        self.portfolio_weights = pd.DataFrame(index=df.index, columns=df.columns)
+        assets = df.columns[df.columns != self.exclude]   # 不包含 SPY
+        self.portfolio_weights = pd.DataFrame(0.0, index=df.index, columns=df.columns)
 
         for i in range(self.lookback, len(df)):
-            window = df_returns[assets].iloc[i - self.lookback : i]
+            window = df_returns[assets].iloc[i-self.lookback : i]
 
-            # volatility
-            vol = window.std()
+            vol = window.std().replace(0, 1e-8)
+            vol = vol.replace([np.inf, -np.inf], np.nan)
+            if vol.isna().any():
+                vol = vol.fillna(vol.mean())
 
-            # inverse vol
-            inv_vol = 1.0 / vol
+            inv_vol = 1 / vol
+            inv_vol = inv_vol.fillna(0)
 
-            # normalize
             weights = inv_vol / inv_vol.sum()
 
-            # 只賦值給非 SPY 欄位
-            self.portfolio_weights.loc[df.index[i], assets] = weights.values
+            # 填入 dataframe（SPY 權重 = 0）
+            for col in df.columns:
+                if col == self.exclude:
+                    self.portfolio_weights.loc[df.index[i], col] = 0
+                else:
+                    self.portfolio_weights.loc[df.index[i], col] = weights[col]
 
-        # 填補 NaN：未交易日 = 前一天
+        # 前 lookback 天必須 forward fill，不能是 0！
         self.portfolio_weights.ffill(inplace=True)
         self.portfolio_weights.fillna(0, inplace=True)
+
 
 
     def calculate_portfolio_returns(self):
