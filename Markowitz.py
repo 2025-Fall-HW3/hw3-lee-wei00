@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import argparse
 import warnings
 import sys
-
+from scipy.optimize import minimize
 """
 Project Setup
 """
@@ -111,61 +111,57 @@ class RiskParityPortfolio:
         self.exclude = exclude
         self.lookback = lookback
 
+    def risk_contribution(self, w, cov):
+        port_var = w.T @ cov @ w
+        mrc = cov @ w
+        rc = w * mrc
+        return rc, port_var
+
+    def risk_parity_obj(self, w, cov):
+        rc, port_var = self.risk_contribution(w, cov)
+        # target risk = equal risk contribution
+        n = len(w)
+        target = port_var / n
+        return ((rc - target) ** 2).sum()
+
     def calculate_weights(self):
-        # === 1. 助教格式：SPY 一定要放在最前面 ===
-        assets = df.columns[df.columns != self.exclude]  # 11 ETFs
-        all_cols = [self.exclude] + list(assets)         # SPY + other ETFs (助教格式)
+        assets = df.columns[df.columns != self.exclude]
+        self.portfolio_weights = pd.DataFrame(0.0, index=df.index, columns=df.columns)
 
-        # 建立完整 dataframe
-        self.portfolio_weights = pd.DataFrame(
-            0.0, index=df.index, columns=all_cols
-        )
-
-        # === 2. 從 lookback 開始滾動計算 ===
         for i in range(self.lookback, len(df)):
             window = df_returns[assets].iloc[i-self.lookback:i]
 
-            # volatility
-            vol = window.std().replace([np.inf, -np.inf], np.nan)
+            cov = window.cov().values
+            n = len(assets)
 
-            if vol.isna().all():
-                vol = pd.Series(1.0, index=vol.index)
-            else:
-                m = vol.mean()
-                if np.isnan(m) or m == 0:
-                    m = 1.0
-                vol = vol.fillna(m)
+            x0 = np.ones(n) / n
+            bounds = [(0, 1)] * n
+            cons = ({'type': 'eq', 'fun': lambda w: w.sum() - 1})
 
-            inv_vol = 1.0 / vol
-            inv_vol = inv_vol.replace([np.inf, -np.inf], 0).fillna(0)
+            res = minimize(self.risk_parity_obj, x0,
+                           args=(cov,),
+                           bounds=bounds,
+                           constraints=cons,
+                           tol=1e-8)
 
-            # === normalize ===
-            if inv_vol.sum() == 0:
-                w = np.ones(len(assets)) / len(assets)
-            else:
-                w = (inv_vol / inv_vol.sum()).values
+            w = res.x
+            # SPY = 0
+            full = np.zeros(len(df.columns))
+            for k, col in enumerate(df.columns):
+                if col != self.exclude:
+                    full[k] = w[list(assets).index(col)]
+                else:
+                    full[k] = 0.0
 
-            # === 3. 助教格式：第一欄 SPY 必須永遠 = 0 ===
-            full = np.zeros(len(all_cols))
-            full[0] = 0.0  # SPY
+            self.portfolio_weights.iloc[i] = full
 
-            # 填入 11 檔 sector 權重
-            for k, col in enumerate(assets):
-                full[1 + k] = w[k]
-
-            # 放回 dataframe
-            self.portfolio_weights.loc[df.index[i]] = full
-
-        # forward fill
         self.portfolio_weights.ffill(inplace=True)
-        self.portfolio_weights.fillna(0, inplace=True)
 
     def calculate_portfolio_returns(self):
         if not hasattr(self, "portfolio_weights"):
             self.calculate_weights()
 
         assets = df.columns[df.columns != self.exclude]
-
         self.portfolio_returns = df_returns.copy()
         self.portfolio_returns["Portfolio"] = (
             self.portfolio_returns[assets]
@@ -176,7 +172,6 @@ class RiskParityPortfolio:
     def get_results(self):
         if not hasattr(self, "portfolio_returns"):
             self.calculate_portfolio_returns()
-
         return self.portfolio_weights, self.portfolio_returns
 
 """
